@@ -1,5 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import TelegramLogin from './components/TelegramLogin.vue'
+
+const tab = ref('google')
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -14,12 +17,15 @@ onMounted(() => {
     client_id: CLIENT_ID,
     callback: handleCredentialResponse,
   })
+  renderGoogleBtn()
+})
 
+function renderGoogleBtn() {
   window.google.accounts.id.renderButton(
     document.getElementById('google-btn'),
     { theme: 'outline', size: 'large', text: 'signin_with' }
   )
-})
+}
 
 function parseJwt(token) {
   const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
@@ -58,47 +64,75 @@ function signOut() {
   apiResponse.value = null
   error.value = null
 }
+
+function switchTab(next) {
+  tab.value = next
+  if (next === 'google' && !user.value) {
+    // Re-render Google button after tab switch
+    setTimeout(() => {
+      const el = document.getElementById('google-btn')
+      if (el && !el.firstChild) renderGoogleBtn()
+    }, 0)
+  }
+}
 </script>
 
 <template>
   <div class="page">
     <div class="card">
-      <h1>Google OAuth Sample</h1>
+      <h1>OAuth Login Sample</h1>
 
-      <template v-if="!user">
-        <p class="hint">Sign in with your Google account to test the OAuth flow.</p>
-        <div id="google-btn"></div>
-      </template>
+      <div class="tabs">
+        <button :class="['tab', { active: tab === 'google' }]" @click="switchTab('google')">
+          Google
+        </button>
+        <button :class="['tab', { active: tab === 'telegram' }]" @click="switchTab('telegram')">
+          Telegram
+        </button>
+      </div>
 
-      <template v-else>
-        <div class="profile">
-          <img :src="user.picture" :alt="user.name" class="avatar" />
-          <div>
-            <p class="name">{{ user.name }}</p>
-            <p class="email">{{ user.email }}</p>
+      <!-- Google Tab -->
+      <div v-show="tab === 'google'">
+        <template v-if="!user">
+          <p class="hint">Sign in with your Google account to test the OAuth flow.</p>
+          <div id="google-btn"></div>
+        </template>
+
+        <template v-else>
+          <div class="profile">
+            <img :src="user.picture" :alt="user.name" class="avatar" />
+            <div>
+              <p class="name">{{ user.name }}</p>
+              <p class="email">{{ user.email }}</p>
+            </div>
           </div>
-        </div>
 
-        <section class="section">
-          <h2>ID Token (JWT)</h2>
-          <textarea readonly :value="idToken" rows="4"></textarea>
-        </section>
+          <section class="section">
+            <h2>ID Token (JWT)</h2>
+            <textarea readonly :value="idToken" rows="4"></textarea>
+          </section>
 
-        <section class="section">
-          <h2>Decoded Payload</h2>
-          <pre>{{ JSON.stringify(user, null, 2) }}</pre>
-        </section>
+          <section class="section">
+            <h2>Decoded Payload</h2>
+            <pre>{{ JSON.stringify(user, null, 2) }}</pre>
+          </section>
 
-        <section class="section">
-          <h2>API Response <code>POST /api/v1/register/google</code></h2>
-          <div v-if="loading" class="loading">Sending to API…</div>
-          <div v-else-if="error" class="error">{{ error }}</div>
-          <pre v-else-if="apiResponse">Status: {{ apiResponse.status }}
+          <section class="section">
+            <h2>API Response <code>POST /api/v1/register/google</code></h2>
+            <div v-if="loading" class="loading">Sending to API…</div>
+            <div v-else-if="error" class="error">{{ error }}</div>
+            <pre v-else-if="apiResponse">Status: {{ apiResponse.status }}
 {{ apiResponse.body }}</pre>
-        </section>
+          </section>
 
-        <button class="sign-out" @click="signOut">Sign out</button>
-      </template>
+          <button class="sign-out" @click="signOut">Sign out</button>
+        </template>
+      </div>
+
+      <!-- Telegram Tab -->
+      <div v-show="tab === 'telegram'">
+        <TelegramLogin />
+      </div>
     </div>
   </div>
 </template>
@@ -145,6 +179,34 @@ h2 {
   margin-bottom: .5rem;
 }
 
+.tabs {
+  display: flex;
+  gap: .5rem;
+  margin-bottom: 1.75rem;
+  border-bottom: 2px solid #e8e8e8;
+  padding-bottom: 0;
+}
+
+.tab {
+  padding: .5rem 1.25rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: .95rem;
+  font-weight: 500;
+  color: #888;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+
+.tab.active {
+  color: #1a1a1a;
+  border-bottom-color: #1a1a1a;
+}
+
+.tab:hover:not(.active) { color: #444; }
+
 .hint {
   color: #555;
   margin-bottom: 1.5rem;
@@ -169,6 +231,7 @@ h2 {
   width: 56px;
   height: 56px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .name { font-weight: 600; font-size: 1rem; }
