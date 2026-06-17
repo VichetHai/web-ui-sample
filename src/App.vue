@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import TelegramLogin from './components/TelegramLogin.vue'
+import PasswordLogin from './components/PasswordLogin.vue'
 
 const tab = ref('google')
 
@@ -89,6 +90,9 @@ function switchTab(next) {
         <button :class="['tab', { active: tab === 'telegram' }]" @click="switchTab('telegram')">
           Telegram
         </button>
+        <button :class="['tab', { active: tab === 'password' }]" @click="switchTab('password')">
+          Password
+        </button>
       </div>
 
       <!-- Google Tab -->
@@ -132,6 +136,11 @@ function switchTab(next) {
       <!-- Telegram Tab -->
       <div v-show="tab === 'telegram'">
         <TelegramLogin />
+      </div>
+
+      <!-- Password Tab -->
+      <div v-show="tab === 'password'">
+        <PasswordLogin />
       </div>
     </div>
   </div>
