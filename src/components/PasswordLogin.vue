@@ -1,7 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const CAPTCHA_ENABLED = import.meta.env.VITE_CAPTCHA_ENABLED === 'true'
+const CAPTCHA_SITE_KEY = import.meta.env.VITE_CAPTCHA_SITE_KEY
 
 const username = ref('')
 const password = ref('')
@@ -9,12 +11,57 @@ const keyInfo = ref(null)
 const keyLoading = ref(true)
 const keyError = ref(null)
 
+const captchaToken = ref(null)
+const captchaWidgetId = ref(null)
+
 const loading = ref(false)
 const error = ref(null)
 const apiResponse = ref(null)
 const loggedIn = ref(false)
 
-onMounted(fetchPublicKey)
+onMounted(() => {
+  fetchPublicKey()
+  if (CAPTCHA_ENABLED) loadTurnstile()
+})
+
+onUnmounted(() => {
+  delete window.onTurnstileLoad
+})
+
+function loadTurnstile() {
+  window.onTurnstileLoad = renderTurnstile
+  if (window.turnstile) {
+    renderTurnstile()
+    return
+  }
+  const script = document.createElement('script')
+  script.async = true
+  script.defer = true
+  script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad'
+  document.head.appendChild(script)
+}
+
+function renderTurnstile() {
+  captchaWidgetId.value = window.turnstile.render('#turnstile-widget', {
+    sitekey: CAPTCHA_SITE_KEY,
+    callback: (token) => {
+      captchaToken.value = token
+    },
+    'expired-callback': () => {
+      captchaToken.value = null
+    },
+    'error-callback': () => {
+      captchaToken.value = null
+    },
+  })
+}
+
+function resetTurnstile() {
+  captchaToken.value = null
+  if (window.turnstile && captchaWidgetId.value) {
+    window.turnstile.reset(captchaWidgetId.value)
+  }
+}
 
 async function fetchPublicKey() {
   keyLoading.value = true
@@ -60,6 +107,11 @@ async function encryptPassword(plain) {
 }
 
 async function handleSubmit() {
+  if (CAPTCHA_ENABLED && !captchaToken.value) {
+    error.value = 'Please complete the captcha.'
+    return
+  }
+
   error.value = null
   apiResponse.value = null
   loading.value = true
@@ -68,10 +120,13 @@ async function handleSubmit() {
       ? await encryptPassword(password.value)
       : password.value
 
+    const body = { username: username.value, password: encryptedPassword }
+    if (CAPTCHA_ENABLED) body.captcha_token = captchaToken.value
+
     const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value, password: encryptedPassword }),
+      body: JSON.stringify(body),
     })
     const text = await res.text()
     apiResponse.value = { status: res.status, body: text }
@@ -80,6 +135,7 @@ async function handleSubmit() {
     error.value = `Login failed: ${err.message}`
   } finally {
     loading.value = false
+    if (CAPTCHA_ENABLED) resetTurnstile()
   }
 }
 
@@ -108,7 +164,8 @@ function signOut() {
         <span>Password</span>
         <input v-model="password" type="password" required autocomplete="current-password" />
       </label>
-      <button class="submit" type="submit" :disabled="loading">
+      <div v-if="CAPTCHA_ENABLED" id="turnstile-widget" class="captcha"></div>
+      <button class="submit" type="submit" :disabled="loading || (CAPTCHA_ENABLED && !captchaToken)">
         {{ loading ? 'Signing in…' : 'Sign in' }}
       </button>
     </form>
@@ -178,4 +235,9 @@ function signOut() {
 
 .submit:hover:not(:disabled) { background: #333; }
 .submit:disabled { background: #999; cursor: not-allowed; }
+
+.captcha {
+  display: flex;
+  justify-content: center;
+}
 </style>
